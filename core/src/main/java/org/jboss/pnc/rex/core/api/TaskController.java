@@ -40,7 +40,7 @@ public interface TaskController {
     void setMode(String name, Mode mode);
 
     /**
-     * Sets mode of a Task. Needs to be called in a transaction. Additionally pokes queue
+     * Sets mode of a Task. Needs to be called in a transaction. Additionally, pokes queue
      * after transaction succeeds if specified.
      *
      * @param name id of the Task
@@ -70,7 +70,17 @@ public interface TaskController {
     /**
      * Deletes a Task. The method deletes also cascades on dependencies.
      *
+     * A Task can be removed only if all of its dependants are removed and is marked for disposal.
+     *
      * @param name id of the Task
      */
     void delete(String name);
+
+    /**
+     * Marks the Task for disposal/cleaning.
+     *
+     * @param name        id of thr Task
+     * @param pokeCleaner
+     */
+    void markForDisposal(String name, boolean pokeCleaner);
 }

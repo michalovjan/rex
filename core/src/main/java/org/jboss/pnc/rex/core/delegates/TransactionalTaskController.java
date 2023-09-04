@@ -70,4 +70,10 @@ public class TransactionalTaskController implements TaskController {
     public void delete(String name) {
         delegate.delete(name);
     }
+
+    @Override
+    @Transactional
+    public void markForDisposal(String name, boolean pokeCleaner) {
+        delegate.markForDisposal(name, pokeCleaner);
+    }
 }

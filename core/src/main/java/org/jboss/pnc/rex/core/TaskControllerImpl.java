@@ -40,7 +40,9 @@ import org.jboss.pnc.rex.core.jobs.ControllerJob;
 import org.jboss.pnc.rex.core.jobs.DependencyCancelledJob;
 import org.jboss.pnc.rex.core.jobs.DependencyStoppedJob;
 import org.jboss.pnc.rex.core.jobs.DependencySucceededJob;
+import org.jboss.pnc.rex.core.jobs.MarkForCleaningJob;
 import org.jboss.pnc.rex.core.jobs.NotifyCallerJob;
+import org.jboss.pnc.rex.core.jobs.PokeCleanJob;
 import org.jboss.pnc.rex.core.jobs.PokeQueueJob;
 import org.jboss.pnc.rex.model.ServerResponse;
 import org.jboss.pnc.rex.model.Task;
@@ -100,16 +102,7 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
 
             case UP_to_STOP_REQUESTED, STARTING_to_STOP_REQUESTED -> List.of(new InvokeStopJob(task));
 
-            case STOPPING_TO_STOPPED -> {
-                var jobs = new ArrayList<ControllerJob>();
-                jobs.add(new DependencyCancelledJob(task));
-                jobs.add(new DecreaseCounterJob(task));
-                jobs.add(new PokeQueueJob());
-                if (shouldDeleteImmediately(task, transition))
-                    jobs.add(moveToTheEndOfTransaction(new DeleteTaskJob(task)));
-
-                yield jobs;
-            }
+            case STOPPING_TO_STOPPED -> List.of(new DependencyCancelledJob(task), new DecreaseCounterJob(task));
 
             case NEW_to_STOPPED, WAITING_to_STOPPED, ENQUEUED_to_STOPPED -> {
                 var jobs = new ArrayList<ControllerJob>();
@@ -119,44 +112,40 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
                     // UNSUCCESSFUL is in FAILED transitions
                     case UNSUCCESSFUL, NONE -> {}
                 }
-                if (shouldDeleteImmediately(task, transition))
-                    jobs.add(moveToTheEndOfTransaction(new DeleteTaskJob(task)));
-
                 yield jobs;
             }
 
-            case UP_to_FAILED, STARTING_to_START_FAILED, STOPPING_TO_STOP_FAILED, STOP_REQUESTED_to_STOP_FAILED -> {
-                var jobs = new ArrayList<ControllerJob>();
-                jobs.add(new DependencyStoppedJob(task));
-                jobs.add(new DecreaseCounterJob(task));
-                jobs.add(new PokeQueueJob());
-                if (shouldDeleteImmediately(task, transition))
-                    jobs.add(moveToTheEndOfTransaction(new DeleteTaskJob(task)));
-
-                yield jobs;
-            }
+            case UP_to_FAILED, STARTING_to_START_FAILED, STOPPING_TO_STOP_FAILED, STOP_REQUESTED_to_STOP_FAILED
+                    -> List.of(new DependencyStoppedJob(task), new DecreaseCounterJob(task));
 
             //no tasks
             case STOP_REQUESTED_to_STOPPING, STARTING_to_UP -> List.of();
 
-            case UP_to_SUCCESSFUL -> {
+            case UP_to_SUCCESSFUL -> List.of(new DependencySucceededJob(task), new DecreaseCounterJob(task));
+        });
+
+        // add common tasks on transitioning into a specific StateGroup
+        tasks.addAll(switch (transition.getAfter().getGroup()) {
+            case IDLE,QUEUED, RUNNING -> List.of();
+            case FINAL -> {
                 var jobs = new ArrayList<ControllerJob>();
-                jobs.add(new DependencySucceededJob(task));
-                jobs.add(new DecreaseCounterJob(task));
                 jobs.add(new PokeQueueJob());
+                if (shouldMarkImmediately(task, transition))
+                    jobs.add(new MarkForCleaningJob(task));
                 if (shouldDeleteImmediately(task, transition))
                     jobs.add(moveToTheEndOfTransaction(new DeleteTaskJob(task)));
 
                 yield jobs;
             }
         });
+
         task.setState(transition.getAfter());
 
         // notify the caller about a transition
         var notifyJob = new NotifyCallerJob(transition, task);
-        if (shouldDeleteOnNotification(task, transition)) {
+        if (shouldMarkAfterNotification(task, transition)) {
             // send notification and delete jobs after a success
-            tasks.add(ChainingJob.of(notifyJob).chainOnSuccess(withTransactionAndTolerance(new DeleteTaskJob(task))));
+            tasks.add(ChainingJob.of(notifyJob).chainOnSuccess(withTransactionAndTolerance(new MarkForCleaningJob(task, true))));
         } else {
             // send notification
             tasks.add(notifyJob);
@@ -275,11 +264,24 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
         return shouldDelete(task, transition) && task.getCallerNotifications() == null;
     }
 
-    private boolean shouldDeleteOnNotification(Task task, Transition transition) {
-        return shouldDelete(task, transition) && task.getCallerNotifications() != null;
-    }
     private boolean shouldDelete(Task task, Transition transition) {
-        return cleanTasks && task.getDependants().size() == 0 && transition.getAfter().isFinal();
+        return cleanTasks && task.getDependants().isEmpty() && transition.getAfter().isFinal();
+    }
+
+    private boolean shouldMarkAfterNotification(Task task, Transition transition) {
+        return shouldMark(task, transition) && task.getCallerNotifications() != null;
+    }
+
+    private boolean shouldMark(Task task, Transition transition) {
+        return cleanTasks && transition.getAfter().isFinal();
+    }
+
+    /**
+     * A Task gets marked for deletion either immediately upon transitioning into a final state or after a FINAL
+     * NOTIFICATION completes.
+     */
+    private boolean shouldMarkImmediately(Task task, Transition transition) {
+        return cleanTasks && transition.getAfter().isFinal() && task.getCallerNotifications() == null;
     }
 
     private void handle(VersionedValue<Task> taskMetadata, Task task) {
@@ -292,6 +294,12 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
             jobs.addAll(Arrays.asList(forcedJobs));
         }
 
+        saveChanges(taskMetadata, task);
+
+        doExecute(jobs);
+    }
+
+    private void saveChanges(VersionedValue<Task> taskMetadata, Task task) {
         log.debug("SAVE {}: Saving task into ISPN. (ISPN-VERSION: {}) BODY: {}",
                 task.getName(),
                 taskMetadata.getVersion(),
@@ -302,8 +310,6 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
             log.error("SAVE {}: Concurrent update detected. Transaction will fail.", task.getName());
             throw new ConcurrentUpdateException("Task " + task.getName() + " was remotely updated during the transaction");
         }
-
-        doExecute(jobs);
     }
 
     private void doExecute(List<ControllerJob> jobs) {
@@ -476,26 +482,43 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
         }
         Task task = taskMetadata.getValue();
 
-        if (!task.getState().isFinal()) {
+        if (!task.getState().isFinal() || !task.isDisposable()) {
             log.info("TASK {}: Not in final state, removing deleted dependant {} from the task.", name, deletedDependant);
             //REMOVE dependant so it doesn't get referenced later
             task.getDependants().remove(deletedDependant);
 
-            log.debug("SAVE {}: Saving task into ISPN. (ISPN-VERSION: {}) BODY: {}",
-                    task.getName(),
-                    taskMetadata.getVersion(),
-                    task);
-
-            boolean pushed = container.getCache().replaceWithVersion(task.getName(), task, taskMetadata.getVersion());
-            if (!pushed) {
-                log.error("SAVE {}: Concurrent update detected. Transaction will fail.", task.getName());
-                throw new ConcurrentUpdateException("Task " + task.getName() + " was remotely updated during the transaction");
-            }
+            saveChanges(taskMetadata, task);
         } else {
             // DELETE
             doExecute(List.of(new DeleteTaskJob(task)));
         }
 
+    }
+
+    @Override
+    @Transactional(MANDATORY)
+    public void markForDisposal(String name, boolean pokeCleaner) {
+        // #1 PULL
+        VersionedValue<Task> taskMetadata = container.getRequiredTaskWithMetadata(name);
+        Task task = taskMetadata.getValue();
+
+        // #2 ALTER
+        if (!task.getState().isFinal()) {
+            throw new IllegalStateException("Attempting to mark a task for disposal while not in a final state. Task: " + task.getName() + " State: " + task.getState());
+        }
+
+        log.info("TASK {}: MARKING FOR DELETION.", name);
+        task.setDisposable(true);
+
+        // once marked for removal, we can allow scheduling tasks with same constraints
+        handleOptionalConstraint(task);
+
+        saveChanges(taskMetadata, task);
+
+        // #3 HANDLE (there is no transition)
+        if (pokeCleaner) {
+            doExecute(List.of(new PokeCleanJob(task)));
+        }
     }
 
     @Override
@@ -509,6 +532,11 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
         if (!task.getState().isFinal()) {
             throw new IllegalStateException("Attempting to delete a task while not in a final state. Task: " + task.getName() + " State: " + task.getState());
         }
+
+        if (!task.isDisposable()) {
+            throw new IllegalStateException("Attempting to delete a task while not marked as disposable. Task: " + task.getName() + " State: " + task.getState());
+        }
+
         log.debug("DELETE {}: Deleting task from ISPN. (ISPN-VERSION: {}) BODY: {}",
                 task.getName(),
                 taskMetadata.getVersion(),
@@ -534,7 +562,6 @@ public class TaskControllerImpl implements TaskController, DependentMessenger, D
                 log.debug("TASK {}: Removing constraint '{}' from cache.", task.getName(), constraint);
                 container.getConstraintCache().removeWithVersion(constraint, constraintMeta.getVersion());
             }
-
         }
     }
 }

@@ -74,6 +74,14 @@ public interface TaskRegistry {
     List<Task> getTasksByCorrelationID(String correlationID);
 
     /**
+     * Return tasks that are marked disposable and do not have dependants. These tasks are suitable for immediate
+     * deletion.
+     *
+     * @return list of marked tasks without dependants
+     */
+    List<Task> getMarkedTasksWithoutDependants();
+
+    /**
      * Returns all task identifiers in clustered container.
      *
      * @return the service names

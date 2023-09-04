@@ -37,6 +37,7 @@ public interface InitialTaskMapper {
     @Mapping(target = "stopFlag", constant = "NONE")
     @Mapping(target = "state", constant = "NEW")
     @Mapping(target = "starting", constant = "false")
+    @Mapping(target = "disposable", constant = "false")
     @Mapping(target = "timestamps", expression = "java( new TreeSet() )")
     // Singular additions
     @Mapping(target = "serverResponse", ignore = true)

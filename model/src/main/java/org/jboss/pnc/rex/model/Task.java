@@ -154,6 +154,15 @@ public class Task {
     @Getter(onMethod_ = @ProtoField(number = 16, collectionImplementation = TreeSet.class))
     private Set<TransitionTime> timestamps;
 
+    /**
+     * This flag indicates that this task can be removed from ISPN Cache. Usually a Task flagged to be removed after a
+     * Notification completes or, in case no Notifications, immediately after transitioning into a finished State.
+     *
+     * Even though a Task can be flagged disposable, it won't be removed until all dependants are removed beforehand.
+     */
+    @Getter(onMethod_ = @ProtoField(number = 17, defaultValue = "false"))
+    private boolean disposable;
+
     public void incUnfinishedDependencies() {
         unfinishedDependencies++;
     }
@@ -161,6 +170,7 @@ public class Task {
     public void decUnfinishedDependencies() {
         unfinishedDependencies--;
     }
+
 
     @Override
     public boolean equals(Object o) {

@@ -112,6 +112,10 @@ org:
             TolerantQueueManager/setMaximumConcurrency/Retry/delay: ${scheduler.options.internal-retry-policy.delay}
             TolerantQueueManager/setMaximumConcurrency/Retry/jitter: ${scheduler.options.internal-retry-policy.jitter}
             TolerantQueueManager/setMaximumConcurrency/Retry/abortOn: ${scheduler.options.internal-retry-policy.abort-on}
+            TolerantCleaningManager/tryClean/Retry/maxRetries: ${scheduler.options.internal-retry-policy.max-retries}
+            TolerantCleaningManager/tryClean/Retry/delay: ${scheduler.options.internal-retry-policy.delay}
+            TolerantCleaningManager/tryClean/Retry/jitter: ${scheduler.options.internal-retry-policy.jitter}
+            TolerantCleaningManager/tryClean/Retry/abortOn: ${scheduler.options.internal-retry-policy.abort-on}
         rest:
           InternalEndpointImpl/finish/Retry/maxRetries: ${scheduler.options.internal-retry-policy.max-retries}
           InternalEndpointImpl/finish/Retry/delay: ${scheduler.options.internal-retry-policy.delay}

@@ -22,6 +22,7 @@ import org.infinispan.client.hotrod.VersionedValue;
 import org.jboss.pnc.rex.core.api.QueueManager;
 import org.jboss.pnc.rex.core.api.TaskContainer;
 import org.jboss.pnc.rex.core.api.TaskController;
+import org.jboss.pnc.rex.core.api.TaskRegistry;
 import org.jboss.pnc.rex.core.counter.Counter;
 import org.jboss.pnc.rex.core.counter.MaxConcurrent;
 import org.jboss.pnc.rex.core.counter.Running;
@@ -42,10 +43,10 @@ public class QueueManagerImpl implements QueueManager {
 
     private final Counter max;
     private final Counter running;
-    private final TaskContainer container;
+    private final TaskRegistry container;
     private final TaskController controller;
 
-    public QueueManagerImpl(@MaxConcurrent Counter max, @Running Counter running, TaskContainer container, TaskController controller) {
+    public QueueManagerImpl(@MaxConcurrent Counter max, @Running Counter running, TaskRegistry container, TaskController controller) {
         this.max = max;
         this.running = running;
         this.container = container;
@@ -71,7 +72,7 @@ public class QueueManagerImpl implements QueueManager {
 
         List<Task> randomEnqueuedTasks = container.getEnqueuedTasks(freeSpace);
 
-        if (randomEnqueuedTasks.size() == 0) {
+        if (randomEnqueuedTasks.isEmpty()) {
             return;
         }
 

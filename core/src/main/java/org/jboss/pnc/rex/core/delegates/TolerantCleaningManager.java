@@ -15,18 +15,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jboss.pnc.rex.core.mapper;
+package org.jboss.pnc.rex.core.delegates;
 
-import org.jboss.pnc.rex.facade.mapper.MapperCentralConfig;
-import org.jboss.pnc.rex.facade.mapper.TransitionTimeMapper;
-import org.jboss.pnc.rex.model.Task;
-import org.jboss.pnc.rex.model.requests.MinimizedTask;
-import org.mapstruct.BeanMapping;
-import org.mapstruct.Mapper;
+import io.quarkus.arc.Unremovable;
+import org.eclipse.microprofile.faulttolerance.Retry;
+import org.jboss.pnc.rex.core.api.CleaningManager;
 
-@Mapper(config = MapperCentralConfig.class, uses = {TransitionTimeMapper.class})
-public interface MiniTaskMapper {
+import javax.enterprise.context.ApplicationScoped;
 
-    @BeanMapping(ignoreUnmappedSourceProperties = {"unfinishedDependencies", "starting", "controllerMode", "disposable"})
-    MinimizedTask minimize(Task task);
+@WithRetries
+@Unremovable
+@ApplicationScoped
+public class TolerantCleaningManager implements CleaningManager {
+
+    private final CleaningManager delegate;
+
+    public TolerantCleaningManager(CleaningManager manager) {
+        this.delegate = manager;
+    }
+
+    @Override
+    @Retry
+    public void tryClean() {
+        delegate.tryClean();
+    }
 }

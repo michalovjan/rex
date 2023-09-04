@@ -18,6 +18,7 @@
 package org.jboss.pnc.rex.core;
 
 import io.quarkus.infinispan.client.Remote;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.infinispan.client.hotrod.Flag;
@@ -69,9 +70,11 @@ import static javax.transaction.Transactional.TxType.MANDATORY;
 @ApplicationScoped
 public class TaskContainerImpl implements TaskContainer, TaskTarget {
 
+    @Getter
     @ConfigProperty(name = "scheduler.name", defaultValue = "undefined")
     String deploymentName;
 
+    @Getter
     @ConfigProperty(name = "scheduler.baseUrl")
     String baseUrl;
 
@@ -99,10 +102,6 @@ public class TaskContainerImpl implements TaskContainer, TaskTarget {
     // FIXME implement
     public void shutdown() {
         throw new UnsupportedOperationException("Currently not implemented!");
-    }
-
-    public String getDeploymentName() {
-        return deploymentName;
     }
 
     public boolean isShutdown() {
@@ -221,8 +220,11 @@ public class TaskContainerImpl implements TaskContainer, TaskTarget {
         return taskQuery.execute().list();
     }
 
-    public String getBaseUrl() {
-        return baseUrl;
+    @Override
+    public List<Task> getMarkedTasksWithoutDependants() {
+        QueryFactory factory = Search.getQueryFactory(tasks);
+        Query<Task> taskQuery = factory.create("FROM rex_model.Task WHERE disposable = true AND dependants IS EMPTY");
+        return taskQuery.execute().list();
     }
 
     private void hasCycle(Set<String> taskIds) throws CircularDependencyException {
@@ -230,7 +232,7 @@ public class TaskContainerImpl implements TaskContainer, TaskTarget {
         List<String> visiting = new ArrayList<>();
         Set<String> visited = new HashSet<>();
 
-        while (notVisited.size() > 0) {
+        while (!notVisited.isEmpty()) {
             String current = notVisited.iterator().next();
             if (dfs(current, notVisited, visiting, visited)) {
                 throw new CircularDependencyException("Cycle has been found on Task " + current + " with loop: " + formatCycle(visiting, current));
