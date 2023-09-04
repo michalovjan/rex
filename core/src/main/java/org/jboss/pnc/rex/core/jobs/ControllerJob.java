@@ -17,6 +17,7 @@
  */
 package org.jboss.pnc.rex.core.jobs;
 
+import lombok.Getter;
 import org.jboss.pnc.rex.model.Task;
 
 import javax.enterprise.event.TransactionPhase;
@@ -35,10 +36,12 @@ import java.util.Optional;
  */
 public abstract class ControllerJob implements Runnable {
 
+    @Getter
     protected TransactionPhase invocationPhase;
 
     protected Task context;
 
+    @Getter
     protected boolean async;
 
     private boolean completed = false;
@@ -75,13 +78,6 @@ public abstract class ControllerJob implements Runnable {
 
     abstract void onFailure();
     abstract void onException(Throwable e);
-
-    public boolean isAsync() {
-        return async;
-    }
-    public TransactionPhase getInvocationPhase() {
-        return invocationPhase;
-    }
 
     public Optional<Task> getContext() {
         return context == null ? Optional.empty() : Optional.of(context);

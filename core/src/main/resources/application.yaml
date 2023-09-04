@@ -89,7 +89,7 @@ quarkus:
       "com.arjuna.ats.jta":
         # Set to WARN if you want to see all the exceptions
         level: ERROR
-    min-level: FINEST
+    min-level: TRACE
 
   vertx:
     max-event-loop-execute-time: 10s

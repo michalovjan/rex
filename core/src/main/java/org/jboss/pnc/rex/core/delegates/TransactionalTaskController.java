@@ -20,10 +20,12 @@ package org.jboss.pnc.rex.core.delegates;
 import javax.enterprise.context.ApplicationScoped;
 import javax.transaction.Transactional;
 
+import io.quarkus.arc.Unremovable;
 import org.jboss.pnc.rex.common.enums.Mode;
 import org.jboss.pnc.rex.core.api.TaskController;
 
 @WithTransactions
+@Unremovable
 @ApplicationScoped
 public class TransactionalTaskController implements TaskController {
 

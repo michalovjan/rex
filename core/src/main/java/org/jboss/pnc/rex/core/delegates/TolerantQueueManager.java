@@ -17,12 +17,14 @@
  */
 package org.jboss.pnc.rex.core.delegates;
 
+import io.quarkus.arc.Unremovable;
 import org.eclipse.microprofile.faulttolerance.Retry;
 import org.jboss.pnc.rex.core.api.QueueManager;
 
 import javax.enterprise.context.ApplicationScoped;
 
 @WithRetries
+@Unremovable
 @ApplicationScoped
 public class TolerantQueueManager implements QueueManager {
 

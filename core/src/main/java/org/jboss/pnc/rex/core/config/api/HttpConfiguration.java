@@ -38,7 +38,7 @@ public interface HttpConfiguration {
      *
      * @return time in milliseconds
      */
-    @WithDefault("30000") // 5 minutes
+    @WithDefault("300000") // 5 minutes
     @PositiveOrZero
     long idleTimeout();
 
